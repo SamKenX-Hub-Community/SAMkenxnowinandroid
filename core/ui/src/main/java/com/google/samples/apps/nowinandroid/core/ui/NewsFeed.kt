@@ -41,7 +41,7 @@ import androidx.compose.ui.tooling.preview.PreviewParameter
 import androidx.compose.ui.unit.dp
 import com.google.samples.apps.nowinandroid.core.analytics.LocalAnalyticsHelper
 import com.google.samples.apps.nowinandroid.core.designsystem.theme.NiaTheme
-import com.google.samples.apps.nowinandroid.core.domain.model.UserNewsResource
+import com.google.samples.apps.nowinandroid.core.model.data.UserNewsResource
 
 /**
  * An extension on [LazyListScope] defining a feed with news resources.
@@ -50,7 +50,9 @@ import com.google.samples.apps.nowinandroid.core.domain.model.UserNewsResource
 fun LazyGridScope.newsFeed(
     feedState: NewsFeedUiState,
     onNewsResourcesCheckedChanged: (String, Boolean) -> Unit,
+    onNewsResourceViewed: (String) -> Unit,
     onTopicClick: (String) -> Unit,
+    onExpandedCardClick: () -> Unit = {},
 ) {
     when (feedState) {
         NewsFeedUiState.Loading -> Unit
@@ -67,12 +69,14 @@ fun LazyGridScope.newsFeed(
                     userNewsResource = userNewsResource,
                     isBookmarked = userNewsResource.isSaved,
                     onClick = {
+                        onExpandedCardClick()
                         analyticsHelper.logNewsResourceOpened(
                             newsResourceId = userNewsResource.id,
-                            newsResourceTitle = userNewsResource.title,
                         )
                         launchCustomChromeTab(context, resourceUrl, backgroundColor)
+                        onNewsResourceViewed(userNewsResource.id)
                     },
+                    hasBeenViewed = userNewsResource.hasBeenViewed,
                     onToggleBookmark = {
                         onNewsResourcesCheckedChanged(
                             userNewsResource.id,
@@ -125,6 +129,7 @@ private fun NewsFeedLoadingPreview() {
             newsFeed(
                 feedState = NewsFeedUiState.Loading,
                 onNewsResourcesCheckedChanged = { _, _ -> },
+                onNewsResourceViewed = {},
                 onTopicClick = {},
             )
         }
@@ -143,6 +148,7 @@ private fun NewsFeedContentPreview(
             newsFeed(
                 feedState = NewsFeedUiState.Success(userNewsResources),
                 onNewsResourcesCheckedChanged = { _, _ -> },
+                onNewsResourceViewed = {},
                 onTopicClick = {},
             )
         }

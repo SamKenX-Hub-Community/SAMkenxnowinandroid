@@ -37,10 +37,13 @@ import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -50,11 +53,13 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.tooling.preview.PreviewParameter
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.google.samples.apps.nowinandroid.core.designsystem.component.NiaLoadingWheel
 import com.google.samples.apps.nowinandroid.core.designsystem.theme.LocalTintTheme
 import com.google.samples.apps.nowinandroid.core.designsystem.theme.NiaTheme
-import com.google.samples.apps.nowinandroid.core.domain.model.UserNewsResource
+import com.google.samples.apps.nowinandroid.core.model.data.UserNewsResource
 import com.google.samples.apps.nowinandroid.core.ui.NewsFeedUiState
 import com.google.samples.apps.nowinandroid.core.ui.NewsFeedUiState.Loading
 import com.google.samples.apps.nowinandroid.core.ui.NewsFeedUiState.Success
@@ -66,15 +71,21 @@ import com.google.samples.apps.nowinandroid.core.ui.newsFeed
 @Composable
 internal fun BookmarksRoute(
     onTopicClick: (String) -> Unit,
+    onShowSnackbar: suspend (String, String?) -> Boolean,
     modifier: Modifier = Modifier,
     viewModel: BookmarksViewModel = hiltViewModel(),
 ) {
     val feedState by viewModel.feedUiState.collectAsStateWithLifecycle()
     BookmarksScreen(
         feedState = feedState,
+        onShowSnackbar = onShowSnackbar,
         removeFromBookmarks = viewModel::removeFromSavedResources,
+        onNewsResourceViewed = { viewModel.setNewsResourceViewed(it, true) },
         onTopicClick = onTopicClick,
         modifier = modifier,
+        shouldDisplayUndoBookmark = viewModel.shouldDisplayUndoBookmark,
+        undoBookmarkRemoval = viewModel::undoBookmarkRemoval,
+        clearUndoState = viewModel::clearUndoState,
     )
 }
 
@@ -85,18 +96,55 @@ internal fun BookmarksRoute(
 @Composable
 internal fun BookmarksScreen(
     feedState: NewsFeedUiState,
+    onShowSnackbar: suspend (String, String?) -> Boolean,
     removeFromBookmarks: (String) -> Unit,
+    onNewsResourceViewed: (String) -> Unit,
     onTopicClick: (String) -> Unit,
     modifier: Modifier = Modifier,
+    shouldDisplayUndoBookmark: Boolean = false,
+    undoBookmarkRemoval: () -> Unit = {},
+    clearUndoState: () -> Unit = {},
 ) {
+    val bookmarkRemovedMessage = stringResource(id = R.string.bookmark_removed)
+    val undoText = stringResource(id = R.string.undo)
+
+    LaunchedEffect(shouldDisplayUndoBookmark) {
+        if (shouldDisplayUndoBookmark) {
+            val snackBarResult = onShowSnackbar(bookmarkRemovedMessage, undoText)
+            if (snackBarResult) {
+                undoBookmarkRemoval()
+            } else {
+                clearUndoState()
+            }
+        }
+    }
+
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_STOP) {
+                clearUndoState()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
     when (feedState) {
         Loading -> LoadingState(modifier)
         is Success -> if (feedState.feed.isNotEmpty()) {
-            BookmarksGrid(feedState, removeFromBookmarks, onTopicClick, modifier)
+            BookmarksGrid(
+                feedState,
+                removeFromBookmarks,
+                onNewsResourceViewed,
+                onTopicClick,
+                modifier,
+            )
         } else {
             EmptyState(modifier)
         }
     }
+
     TrackScreenViewEvent(screenName = "Saved")
 }
 
@@ -115,6 +163,7 @@ private fun LoadingState(modifier: Modifier = Modifier) {
 private fun BookmarksGrid(
     feedState: NewsFeedUiState,
     removeFromBookmarks: (String) -> Unit,
+    onNewsResourceViewed: (String) -> Unit,
     onTopicClick: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -123,7 +172,7 @@ private fun BookmarksGrid(
     LazyVerticalGrid(
         columns = Adaptive(300.dp),
         contentPadding = PaddingValues(16.dp),
-        horizontalArrangement = Arrangement.spacedBy(32.dp),
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
         verticalArrangement = Arrangement.spacedBy(24.dp),
         state = scrollableState,
         modifier = modifier
@@ -133,6 +182,7 @@ private fun BookmarksGrid(
         newsFeed(
             feedState = feedState,
             onNewsResourcesCheckedChanged = { id, _ -> removeFromBookmarks(id) },
+            onNewsResourceViewed = onNewsResourceViewed,
             onTopicClick = onTopicClick,
         )
         item(span = { GridItemSpan(maxLineSpan) }) {
@@ -198,6 +248,7 @@ private fun BookmarksGridPreview(
         BookmarksGrid(
             feedState = Success(userNewsResources),
             removeFromBookmarks = {},
+            onNewsResourceViewed = {},
             onTopicClick = {},
         )
     }

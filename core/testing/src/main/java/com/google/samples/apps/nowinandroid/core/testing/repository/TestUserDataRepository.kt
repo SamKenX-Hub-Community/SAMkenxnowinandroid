@@ -27,6 +27,7 @@ import kotlinx.coroutines.flow.filterNotNull
 
 val emptyUserData = UserData(
     bookmarkedNewsResources = emptySet(),
+    viewedNewsResources = emptySet(),
     followedTopics = emptySet(),
     themeBrand = ThemeBrand.DEFAULT,
     darkThemeConfig = DarkThemeConfig.FOLLOW_SYSTEM,
@@ -72,6 +73,21 @@ class TestUserDataRepository : UserDataRepository {
         }
     }
 
+    override suspend fun setNewsResourceViewed(newsResourceId: String, viewed: Boolean) {
+        currentUserData.let { current ->
+            _userData.tryEmit(
+                current.copy(
+                    viewedNewsResources =
+                    if (viewed) {
+                        current.viewedNewsResources + newsResourceId
+                    } else {
+                        current.viewedNewsResources - newsResourceId
+                    },
+                ),
+            )
+        }
+    }
+
     override suspend fun setThemeBrand(themeBrand: ThemeBrand) {
         currentUserData.let { current ->
             _userData.tryEmit(current.copy(themeBrand = themeBrand))
@@ -95,22 +111,6 @@ class TestUserDataRepository : UserDataRepository {
             _userData.tryEmit(current.copy(shouldHideOnboarding = shouldHideOnboarding))
         }
     }
-
-    /**
-     * A test-only API to allow setting/unsetting of bookmarks.
-     *
-     */
-    fun setNewsResourceBookmarks(newsResourceIds: Set<String>) {
-        currentUserData.let { current ->
-            _userData.tryEmit(current.copy(bookmarkedNewsResources = newsResourceIds))
-        }
-    }
-
-    /**
-     * A test-only API to allow querying the current followed topics.
-     */
-    fun getCurrentFollowedTopics(): Set<String>? =
-        _userData.replayCache.firstOrNull()?.followedTopics
 
     /**
      * A test-only API to allow setting of user data directly.

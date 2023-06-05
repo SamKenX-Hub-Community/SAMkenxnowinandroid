@@ -18,14 +18,16 @@ package com.google.samples.apps.nowinandroid.navigation
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import com.google.samples.apps.nowinandroid.feature.bookmarks.navigation.bookmarksScreen
 import com.google.samples.apps.nowinandroid.feature.foryou.navigation.forYouNavigationRoute
 import com.google.samples.apps.nowinandroid.feature.foryou.navigation.forYouScreen
 import com.google.samples.apps.nowinandroid.feature.interests.navigation.interestsGraph
+import com.google.samples.apps.nowinandroid.feature.search.navigation.searchScreen
 import com.google.samples.apps.nowinandroid.feature.topic.navigation.navigateToTopic
 import com.google.samples.apps.nowinandroid.feature.topic.navigation.topicScreen
+import com.google.samples.apps.nowinandroid.navigation.TopLevelDestination.INTERESTS
+import com.google.samples.apps.nowinandroid.ui.NiaAppState
 
 /**
  * Top-level navigation graph. Navigation is organized as explained at
@@ -36,10 +38,12 @@ import com.google.samples.apps.nowinandroid.feature.topic.navigation.topicScreen
  */
 @Composable
 fun NiaNavHost(
-    navController: NavHostController,
+    appState: NiaAppState,
+    onShowSnackbar: suspend (String, String?) -> Boolean,
     modifier: Modifier = Modifier,
     startDestination: String = forYouNavigationRoute,
 ) {
+    val navController = appState.navController
     NavHost(
         navController = navController,
         startDestination = startDestination,
@@ -47,7 +51,15 @@ fun NiaNavHost(
     ) {
         // TODO: handle topic clicks from each top level destination
         forYouScreen(onTopicClick = {})
-        bookmarksScreen(onTopicClick = {})
+        bookmarksScreen(
+            onTopicClick = navController::navigateToTopic,
+            onShowSnackbar = onShowSnackbar,
+        )
+        searchScreen(
+            onBackClick = navController::popBackStack,
+            onInterestsClick = { appState.navigateToTopLevelDestination(INTERESTS) },
+            onTopicClick = navController::navigateToTopic,
+        )
         interestsGraph(
             onTopicClick = { topicId ->
                 navController.navigateToTopic(topicId)
